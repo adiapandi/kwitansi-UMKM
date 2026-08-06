@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Buku Kwitansi — Invoice & Kwitansi Generator</title>
+
+<link rel="manifest" href="./manifest.json" />
+<meta name="theme-color" content="#1C2541" />
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Buku Kwitansi" />
+
+<style>
+  html, body, #root { height: 100%; margin: 0; }
+  body { background: #F1EFEA; }
+</style>
+
+<!-- Firebase (compat build — bisa dipakai langsung tanpa bundler) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="./firebase-config.js"></script>
+
+<!-- React (tanpa build step) -->
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react" src="./app.jsx"></script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch(console.error);
+    });
+  }
+</script>
+</body>
+</html>

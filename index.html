@@ -15,7 +15,8 @@
 
 <style>
   html, body, #root { height: 100%; margin: 0; }
-  body { background: #F1EFEA; }
+  body { background: #F1EFEA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  #root .fallback { padding: 24px; color: #6B7280; font-size: 14px; }
 </style>
 
 <!-- Firebase (compat build — bisa dipakai langsung tanpa bundler) -->
@@ -30,11 +31,24 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><div class="fallback">Memuat aplikasi...</div></div>
 
 <script type="text/babel" data-presets="react" src="./app.jsx"></script>
 
 <script>
+  // Kalau app.jsx gagal dimuat/dijalankan (mis. 404, error transpile),
+  // tampilkan pesan yang jelas alih-alih layar putih kosong.
+  window.addEventListener('error', function () {
+    if (window.__appMounted) return;
+    var root = document.getElementById('root');
+    if (root) {
+      root.innerHTML = '<div class="fallback" style="color:#B23A2F">' +
+        'Aplikasi gagal dimuat.<br>Buka Console (F12) untuk lihat detail error, ' +
+        'atau cek apakah <code>app.jsx</code> ter-upload dengan nama yang persis sama (case-sensitive).' +
+        '</div>';
+    }
+  });
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./service-worker.js').catch(console.error);

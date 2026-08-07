@@ -517,5 +517,12 @@ function Row({ label, value, bold }) {
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
+try {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<App />);
+  window.__appMounted = true;
+} catch (e) {
+  console.error(e);
+  document.getElementById('root').innerHTML =
+    '<div style="padding:24px;font-family:sans-serif;color:#B23A2F">Gagal memuat aplikasi.<br>Buka Console (F12) untuk detail error.</div>';
+}

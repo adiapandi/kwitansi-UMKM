@@ -207,7 +207,6 @@ function App() {
   return (
     <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: INK, minHeight: '100%', background: '#F1EFEA' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap');
         .doc-serif { font-family: 'Fraunces', Georgia, serif; }
         .font-mono { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
         input:focus, textarea:focus, select:focus { border-color: ${INK} !important; box-shadow: 0 0 0 2px ${INK}22; }

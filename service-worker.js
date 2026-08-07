@@ -1,6 +1,6 @@
 // Naikkan versi ini (v1 -> v2, dst) setiap kali file app di-update,
 // supaya pengguna lama otomatis dapat versi terbaru.
-const CACHE_NAME = 'buku-kwitansi-v1';
+const CACHE_NAME = 'buku-kwitansi-v3';
 
 const APP_SHELL = [
   './',

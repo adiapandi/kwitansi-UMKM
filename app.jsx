@@ -85,19 +85,70 @@ function App() {
   const [toast, setToast] = useState('');
   const [historyFilter, setHistoryFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authMode, setAuthMode] = useState('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    if (FIREBASE_NOT_CONFIGURED) { setAuthChecked(true); setReady(true); return; }
+    const unsub = firebase.auth().onAuthStateChanged((u) => {
+      setUser(u);
+      setAuthChecked(true);
+      if (u) loadAll(u.uid);
+      else { setReady(true); setProfile(emptyProfile()); setInvoices([]); }
+    });
+    return unsub;
+  }, []);
 
-  async function loadAll() {
-    if (FIREBASE_NOT_CONFIGURED) { setReady(true); return; }
-    try { await firebase.auth().signInAnonymously(); } catch (e) { console.error('Auth gagal — cek apakah Anonymous sign-in sudah diaktifkan di Firebase Console', e); }
+  async function handleAuthSubmit(e) {
+    e.preventDefault();
+    setAuthError('');
+    if (!authEmail.trim() || !authPassword) { setAuthError('Isi email dan password dulu'); return; }
+    setAuthBusy(true);
+    try {
+      if (authMode === 'login') {
+        await firebase.auth().signInWithEmailAndPassword(authEmail.trim(), authPassword);
+      } else {
+        await firebase.auth().createUserWithEmailAndPassword(authEmail.trim(), authPassword);
+      }
+      setAuthPassword('');
+    } catch (err) {
+      setAuthError(translateAuthError(err));
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    await firebase.auth().signOut();
+    setTab('form');
+  }
+
+  function translateAuthError(err) {
+    const map = {
+      'auth/invalid-email': 'Format email tidak valid',
+      'auth/user-not-found': 'Akun belum terdaftar — coba Daftar dulu',
+      'auth/wrong-password': 'Password salah',
+      'auth/invalid-credential': 'Email atau password salah',
+      'auth/email-already-in-use': 'Email ini sudah terdaftar — coba Masuk',
+      'auth/weak-password': 'Password minimal 6 karakter',
+      'auth/operation-not-allowed': 'Login Email/Password belum diaktifkan di Firebase Console',
+    };
+    return map[err.code] || (err.message || 'Terjadi kesalahan, coba lagi');
+  }
+
+  async function loadAll(uid) {
     let p = emptyProfile(), inv = [];
     try {
-      const doc = await db.collection('settings').doc('profile').get();
+      const doc = await db.collection('users').doc(uid).collection('meta').doc('profile').get();
       if (doc.exists) p = { ...emptyProfile(), ...doc.data() };
     } catch (e) { console.error(e); }
     try {
-      const snap = await db.collection('invoices').orderBy('savedAt', 'desc').get();
+      const snap = await db.collection('users').doc(uid).collection('invoices').orderBy('savedAt', 'desc').get();
       inv = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (e) { console.error(e); }
     setProfile(p);
@@ -112,7 +163,8 @@ function App() {
 
   async function persistProfile(p) {
     setProfile(p);
-    try { await db.collection('settings').doc('profile').set(p); }
+    if (!user) return;
+    try { await db.collection('users').doc(user.uid).collection('meta').doc('profile').set(p); }
     catch (e) { showToast('Gagal menyimpan profil ke Firebase'); }
   }
 
@@ -154,12 +206,14 @@ function App() {
 
   async function handleSave() {
     if (FIREBASE_NOT_CONFIGURED) return showToast('Firebase belum dikonfigurasi — cek firebase-config.js');
+    if (!user) return showToast('Kamu belum login');
     if (!draft.number.trim()) return showToast('Nomor dokumen belum diisi');
     if (!draft.clientName.trim()) return showToast(draft.type === 'kwitansi' ? 'Nama penerima/pembayar belum diisi' : 'Nama klien belum diisi');
-    const id = draft.id || db.collection('invoices').doc().id;
+    const col = db.collection('users').doc(user.uid).collection('invoices');
+    const id = draft.id || col.doc().id;
     const record = { ...draft, id, savedAt: new Date().toISOString() };
     try {
-      await db.collection('invoices').doc(id).set(record);
+      await col.doc(id).set(record);
       setInvoices(prev => {
         const exists = prev.some(i => i.id === id);
         return exists ? prev.map(i => i.id === id ? record : i) : [record, ...prev];
@@ -170,18 +224,20 @@ function App() {
   }
 
   async function handleDelete(id) {
+    if (!user) return;
     if (!confirm('Hapus dokumen ini dari riwayat?')) return;
     try {
-      await db.collection('invoices').doc(id).delete();
+      await db.collection('users').doc(user.uid).collection('invoices').doc(id).delete();
       setInvoices(prev => prev.filter(i => i.id !== id));
       if (draft.id === id) startNew('invoice');
     } catch (e) { showToast('Gagal menghapus'); }
   }
 
   async function toggleStatus(inv) {
+    if (!user) return;
     const newStatus = inv.status === 'paid' ? 'unpaid' : 'paid';
     try {
-      await db.collection('invoices').doc(inv.id).update({ status: newStatus });
+      await db.collection('users').doc(user.uid).collection('invoices').doc(inv.id).update({ status: newStatus });
       setInvoices(prev => prev.map(i => i.id === inv.id ? { ...i, status: newStatus } : i));
       if (draft.id === inv.id) patch({ status: newStatus });
     } catch (e) { showToast('Gagal mengubah status'); }
@@ -201,6 +257,36 @@ function App() {
   const filteredHistory = invoices
     .filter(i => historyFilter === 'all' || i.type === historyFilter)
     .filter(i => !search.trim() || (i.clientName + i.number).toLowerCase().includes(search.toLowerCase()));
+
+  if (!authChecked) return <div style={{ padding: 40, color: MUTED }}>Memuat...</div>;
+
+  if (!FIREBASE_NOT_CONFIGURED && !user) {
+    return (
+      <div style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1EFEA', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+        <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: 320, border: `1px solid ${LINE}`, boxShadow: '0 6px 24px rgba(28,37,65,0.08)' }}>
+          <div className="doc-serif" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: INK }}>Buku Kwitansi</div>
+          <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 18 }}>{authMode === 'login' ? 'Masuk ke akun kamu' : 'Buat akun baru'}</div>
+          <form onSubmit={handleAuthSubmit}>
+            <Field label="Email">
+              <input type="email" style={inputStyle} value={authEmail} onChange={e => setAuthEmail(e.target.value)} autoComplete="username" />
+            </Field>
+            <Field label="Password">
+              <input type="password" style={inputStyle} value={authPassword} onChange={e => setAuthPassword(e.target.value)}
+                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} />
+            </Field>
+            {authError && <div style={{ fontSize: 12, color: STAMP, marginBottom: 10 }}>{authError}</div>}
+            <button type="submit" disabled={authBusy} style={{ width: '100%', padding: '10px 0', borderRadius: 7, background: INK, color: '#fff', border: 'none', fontWeight: 700, fontSize: 14, cursor: authBusy ? 'default' : 'pointer', opacity: authBusy ? 0.7 : 1 }}>
+              {authBusy ? 'Memproses...' : authMode === 'login' ? 'Masuk' : 'Daftar'}
+            </button>
+          </form>
+          <button onClick={() => { setAuthMode(m => m === 'login' ? 'register' : 'login'); setAuthError(''); }}
+            style={{ width: '100%', marginTop: 10, padding: '8px 0', borderRadius: 7, background: 'none', border: 'none', color: MUTED, fontSize: 12.5, cursor: 'pointer' }}>
+            {authMode === 'login' ? 'Belum punya akun? Daftar' : 'Sudah punya akun? Masuk'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!ready) return <div style={{ padding: 40, color: MUTED }}>Memuat...</div>;
 
@@ -229,7 +315,7 @@ function App() {
       <div className="no-print" style={{ background: CHROME, color: '#EFEDE6' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div className="doc-serif" style={{ fontSize: 20, fontWeight: 700, letterSpacing: '0.02em' }}>Buku Kwitansi</div>
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             {[['form', 'Buat Baru'], ['history', 'Riwayat'], ['profile', 'Profil Usaha']].map(([key, label]) => (
               <button key={key} onClick={() => setTab(key)}
                 style={{
@@ -237,6 +323,12 @@ function App() {
                   background: tab === key ? '#EFEDE6' : 'transparent', color: tab === key ? CHROME : '#C9C6BC',
                 }}>{label}</button>
             ))}
+            {user && !FIREBASE_NOT_CONFIGURED && (
+              <button onClick={handleLogout} title={user.email}
+                style={{ padding: '7px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: `1px solid #3A4266`, cursor: 'pointer', background: 'transparent', color: '#C9C6BC', marginLeft: 6 }}>
+                Keluar
+              </button>
+            )}
           </div>
         </div>
       </div>
